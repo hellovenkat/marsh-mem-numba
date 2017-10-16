@@ -15,7 +15,7 @@ outputDirectory = 'DEM5/multi_threaded'
 if not os.path.exists(outputDirectory) : os.makedirs(outputDirectory)
 #Variables
 #gDEM = "NI_5m.tif"
-gDEM = "Beaufort_meters.tif" #elevation in meters relative to navd88
+gDEM = "Beaufort_DEM2013_meters.tif" #elevation in meters relative to navd88
 #mask = "F:\PIE_MEM3D_Simulation\Master_Data\pie_land_mask.shp"
 #Mean sea level at 2.230 m (local datum) Fort Pulaski, GA
 #MHW = 1.009 #mean high water (m) (relative to mean sea level!!)
