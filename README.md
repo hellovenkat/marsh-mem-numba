@@ -1,21 +1,21 @@
-Libraries needed to be installed:
-numba
-gdal
-rasterio
-numpy
+Libraries needed to be installed: ## Heading 2
++numba
++gdal
++rasterio
++numpy
 
-Files description:
+Files description: ## Heading 2
 MEM_testing_170821_DEM5.py is the original file which is single threaded.
 MEM_testing_numba_DEM5.py is the file which uses multi-threading concept with Numba library to run the program.
 
-To run the original single-threaded program:
+To run the original single-threaded program: ## Heading 2
 From the terminal window and change to the local directory where the downloaded repository is and cd/marsh-mem-Numba.
 Now just run the command,
 `python MEM_testing_170821_DEM5.py` 
 The default location for the output files is 
 `current_directory/DEM5/single_threaded`
 
-To run the multi-threaded program(uses numba library):
+To run the multi-threaded program(uses numba library): ## Heading 2
 From the terminal window and change to the local directory where the downloaded repository is and cd/marsh-mem-Numba.
 Now just run the submit.sh file which has the command,
 `python MEM_testing_numba_DEM5.py` 
