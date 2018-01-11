@@ -6,16 +6,18 @@ import gdal
 import rasterio
 import numpy as np
 from numba import jit
-import threading
+#import threading
 start = time.time()## Starting the counter
 time.strftime("%H:%M:%S")
-#os.chdir(r"/home/venkat/Desktop/Marsh/")
-outputDirectory = 'DEM5/multi_threaded'
+os.chdir(r"/home/venkat/Documents/files_rci/")
+outputDirectory = 'DEM5/'
 #make a folder in the current directory called output if the folder doesnt already exist
 if not os.path.exists(outputDirectory) : os.makedirs(outputDirectory)
 #Variables
 #gDEM = "NI_5m.tif"
-gDEM = "Beaufort_DEM2013_meters.tif" #elevation in meters relative to navd88
+#gDEM = "Beaufort_DEM2013_meters.tif" #elevation in meters relative to navd88
+#gDEM = "Beaufor_3mDEM_4.tif"
+gDEM ="Small_test_area.tif"
 #mask = "F:\PIE_MEM3D_Simulation\Master_Data\pie_land_mask.shp"
 #Mean sea level at 2.230 m (local datum) Fort Pulaski, GA
 #MHW = 1.009 #mean high water (m) (relative to mean sea level!!)
@@ -34,7 +36,7 @@ fE = MaxE + 1  #representing the maximum elevation needed for model simulation, 
 Trange = MHWcm - MLWcm #Tidal Range
 gSLR = 100 #global SLR in cm
 Amp= Trange/2  #tidal amplitude
-T = 10 #time to run model in years
+T = 100 #time to run model in years
 A = 0.317 #local rate of SLR in cm/yr (Fort Pulaski Georgia Tide Gauge)
 sB = (gSLR - A*T)/T**2 #accelerating term for SLR
 #p for patens a for alterniflora
@@ -54,114 +56,100 @@ BGTR = 1 #belowground turnover rate
 RSR = 2 #root-shoot ratio
 outtime = 100 #years
 t_int = 1
-
 #Dictionaries
-def PlatDepth(Zr, ysr, Output_File):
-    #Open raster in both gdal and rasterio
-    ras= rasterio.open(Zr)
-    ras1= gdal.Open(Zr)
-    #Create empty array with same shape as input raster, file1, and fill with 0s
-    Array= np.zeros(shape=(ras.height, ras.width))
-    #For each pixel, if pixel has a value, apply depth eq #see if you can get the bathymetry and the MHT rasters
-    #MHT is mean high tide
-    x = 0
-    for lin in ras.read(1):
-        Array[x] = readFn(ysr, lin)
-        x = x + 1
-    #lets make arrays and then multiply or subtract the arrays. Then create a final array
-    #Once equation is applied, create new raster
-    array_to_raster(Array, Output_File, ras, ras1)
-    ras = None
-    ras1 = None
-
 # Threading
 @jit( nogil=True, cache=True)
-def readFn(yslr, line):
+def PlatDepth(arra, ysr, year, f_fE, f_MinE, f_AmpM, f_Amp, f_MHWcm, f_Trange, f_aa, f_ab, f_ac, f_k2, f_q, f_m, f_f, f_k1, f_kr, f_RSR, f_BGTR):
+    platList = [None] * len(arra)
+    #arrayYear = np.empty(shape=(f_y_pixels, f_x_pixels))
+    for idx, lin in enumerate(arra):
+        platList[idx] = readFn(ysr, lin, f_fE, f_MinE, f_AmpM, f_Amp, f_MHWcm, f_Trange, f_aa, f_ab, f_ac, f_k2, f_q, f_m, f_f, f_k1, f_kr, f_RSR, f_BGTR)
+    #Storing the output array in the total array
+    totalList[year-1] = platList
+
+def readFn(yslr, line, r_fE, r_MinE, r_AmpM, r_Amp, r_MHWcm, r_Trange, r_aa, r_ab, r_ac, r_k2, r_q, r_m, r_f, r_k1, r_kr, r_RSR, r_BGTR):
     List=list()
-    #ListB=list()
+    readArray = np.empty(len(line))
+    ind = 0
     for pixel in line:
-        if str(pixel)== "-32768":
-                List.append("-9999")
-                #ListB.append("-9999")
-        elif str(pixel)== "-3.40282e+38":
-                List.append("-9999")
-                #ListB.append("-9999")
-        elif str(pixel)== "-9999":
-                List.append("-9999")
-                #ListB.append("-9999")
-        elif pixel > fE:
-                List.append("-9999")
-                #ListB.append("-9999")
-        elif pixel <= MinE:
+        if pixel== "-32768":
+                readArray[ind] = "-9999"
+        elif pixel== "-3.40282e+38":
+                readArray[ind] = "-9999"
+        elif pixel== "-9999":
+                readArray[ind] = "-9999"
+        elif pixel > r_fE:
+                readArray[ind] = "-9999"
+        elif pixel <= r_MinE:
                 ZZ = float(pixel)
                 Z =  ZZ*100 #change units to centimeters
-                ZZamp = AmpM-ZZ #meters
-                Zamp  = Amp - Z #cm
-                D = min(1, ((MHWcm) - Z)/Trange) #Dimensionless depth in cm values between 0 and 1
-                D = max(0, D)
+                ZZamp = r_AmpM-ZZ #meters
+                Zamp  = r_Amp - Z #cm
+                #D = min(1, ((MHWcm) - Z)/Trange) #Dimensionless depth in cm values between 0 and 1
+                #D = max(0, D)
                 #absD = max(Amp - Z, 0) # abs Depth when using elevation relative to NAVD88
-                absD = round(max(MHWcm - Z, 0), 2)  #use this when using elevation relative to MSL
+                #absD = round(max(MHWcm - Z, 0), 2)  #use this when using elevation relative to MSL
                 #B = max((aa*absD + ab*absD*absD + ac), 0)  #When using depth to calculate biomass
                 #B = (aa*Z + ab*Z**2 + ac)
                 #B = max((aa*ZZamp + ab*ZZamp*ZZamp + ac), 0)  # when using elevation to calculate biomass convert g/m2 to g/cm2
-                B = 0 #g/m2 to g/cm2
+                #B = 0 #g/m2 to g/cm2
                 DEDT = 0    #    #v5.4=(q*m*f*(Dreal/2) + kr*B)*(LOI/k1+(1-LOI)/k2)
                 #print DEDT
                 #Forcing elevation into meters
                 Z = (Z + ((DEDT*10)- yslr))  #HMMM maybe we need to find out how to use the generated Z's  for future instread  of same input DEM
                 #Z = (Z + (DEDT- yslr))
-                ZZZ = Z/100                 #put elevation output back into meters
-                #ListB.append(B)
-                List.append(ZZZ) #append the depth into the list
-        elif pixel > MinE:
+                ZZZ = Z/100                 #put elevation output back into meters 
+                readArray[ind] = ZZZ #append the depth into the list
+        elif pixel > r_MinE:
                 ZZ = float(pixel)
                 Z =  ZZ*100 #change units to centimeters
-                ZZamp = AmpM-ZZ #meters
-                Zamp  = Amp - Z #cm
-                D = min(1, ((MHWcm) - Z)/Trange) #Dimensionless depth in cm values between 0 and 1
+                ZZamp = r_AmpM-ZZ #meters
+                Zamp  = r_Amp - Z #cm
+                D = min(1, ((r_MHWcm) - Z)/r_Trange) #Dimensionless depth in cm values between 0 and 1
                 D = max(0, D)
                 #absD = max(Amp - Z, 0) # abs Depth when using elevation relative to NAVD88
-                absD = round(max(MHWcm - Z, 0), 2)  #use this when using elevation relative to MSL
+                absD = round(max(r_MHWcm - Z, 0), 2)  #use this when using elevation relative to MSL
                 #B = max((aa*absD + ab*absD*absD + ac), 0)  #When using depth to calculate biomass
                 #B = (aa*Z + ab*Z**2 + ac)
-                B = max((aa*Zamp + ab*Zamp**2 + ac), 0)*0.0001 #g/m2 to g/cm2  # when using elevation to calculate biomass convert g/m2 to g/cm2
-                DEDT = (((1/k2)*(q*m*f*absD*0.5*D))+((1/k1)*(kr*RSR*BGTR*B)))     #    #v5.4=(q*m*f*(Dreal/2) + kr*B)*(LOI/k1+(1-LOI)/k2)
+                B = max((r_aa*Zamp + r_ab*Zamp**2 + r_ac), 0)*0.0001 #g/m2 to g/cm2  # when using elevation to calculate biomass convert g/m2 to g/cm2
+                DEDT = (((1/r_k2)*(r_q*r_m*r_f*absD*0.5*D))+((1/r_k1)*(r_kr*r_RSR*r_BGTR*B)))     #    #v5.4=(q*m*f*(Dreal/2) + kr*B)*(LOI/k1+(1-LOI)/k2)
                 #print DEDT
                 #Forcing elevation into meters
                 Z = (Z + ((DEDT*10)- yslr))  #HMMM maybe we need to find out how to use the generated Z's  for future instread  of same input DEM
                 #print Z
                 #Z = (Z + (DEDT- yslr))
                 ZZZ = Z/100                 #put elevation output back into meters
-                #ListB.append(B)
-                List.append(ZZZ) #append the depth into the list
-    return List
+                readArray[ind] = ZZZ #append the depth into the list
+        ind=ind+1
+    return readArray
 
 
 #########################
 #Create raster from array
 #########################
-def array_to_raster(array, Output_file, raster, raster1):
+
+def array_to_raster(array, Output_file, x_pixels, y_pixels, PIXEL_SIZE, x_min, y_max):
     dst_filename = Output_file
-    print(dst_filename)
+    #print(dst_filename)
     #Get values
     #Number of rows. In this case I'm taking the information from my input raster.
-    x_pixels = raster.width
-    print(x_pixels)
+    #x_pixels = raster.width
+    #print(x_pixels)
     #Number of columns. Also taking the information from my input raster.
-    y_pixels = raster.height
-    print(y_pixels)
+    #y_pixels = raster.height
+    #print(y_pixels)
     #Size of the pixels, pretty sure the default unit is meteres. Also taking this info from input raster.
-    PIXEL_SIZE = raster1.GetGeoTransform()[1]
-    print(PIXEL_SIZE)
+    #PIXEL_SIZE = raster1.GetGeoTransform()[1]
+    #print(PIXEL_SIZE)
     #x_min and y_max are the longitude and latitude values of the top left corner of the image. The "GetGeoTransform" tool gets longitude and latitude
     #information for each corner of the image.
-    x_min = raster1.GetGeoTransform()[0]
-    print(x_min)
-    y_max = raster1.GetGeoTransform()[3]
-    print(y_max)
+    #x_min = raster1.GetGeoTransform()[0]
+    #print(x_min)
+    #y_max = raster1.GetGeoTransform()[3]
+    #print(y_max)
     #This is the projection information. WKT stands for "Well-known text". If you input the projection manually you need the WKT name for the projection.
-    wkt_projection = raster1.GetProjection()
-
+    #wkt_projection = raster1.GetProjection()
+    
     #This is the type of output file you want. Probably always going to be geotiff.
     driver = gdal.GetDriverByName('GTiff')
 
@@ -184,9 +172,10 @@ def array_to_raster(array, Output_file, raster, raster1):
 
         #This sets the projection info for the output raster.
         dataset.SetProjection(wkt_projection)
-       #set no data value
+        #set no data value
         NoData_value = -9999
-        dataset.GetRasterBand(1).WriteArray(array)
+	myarray = np.asarray(array)
+        dataset.GetRasterBand(1).WriteArray(myarray)
         dataset.FlushCache()  # Write to disk.
         return dataset, dataset.GetRasterBand(1)  #If you need to return, remenber to return  also the dataset because the band doesnt live without dataset.
         #assign no data value
@@ -202,22 +191,57 @@ for i in range(1, T+1):
     ySLR[i] = round(SL[i] - SL[i - 1],5)
 print ("sea levels finished")
 
-namel = list()
-namel.append(gDEM)
-#namel.append('year_0.tif')
 
-xx=0
-for i in range(t_int, T+t_int, t_int):
+dem_input = gDEM
+#Open raster in both gdal and rasterio
+ras= rasterio.open(dem_input)
+ras1= gdal.Open(dem_input)
+#Create empty list with same shape as input raster, file1, and fill with 0s
+year1_list= np.empty(shape=(ras.height, ras.width))
+x_pixels = ras.width
+#Number of columns. Also taking the information from my input raster.
+y_pixels = ras.height
+#Intializing the global variables so that they need not be passed while writing to a file
+#Size of the pixels, pretty sure the default unit is meteres. Also taking this info from input raster.
+PIXEL_SIZE = ras1.GetGeoTransform()[1]
+#x_min and y_max are the longitude and latitude values of the top left corner of the image. The "GetGeoTransform" tool gets longitude and latitude
+#information for each corner of the image.
+x_min = ras1.GetGeoTransform()[0]
+y_max = ras1.GetGeoTransform()[3]
+wkt_projection = ras1.GetProjection()
+
+#Declaring the Array which contains all the arrays for every year
+totalList = np.empty((T,y_pixels,x_pixels))
+
+############
+#Running the 1st year directly from the .tif file 
+############
+x = 0
+for lin in ras.read(1):
+    year1_list[x] = (readFn(ySLR[1], lin, fE, MinE, AmpM, Amp, MHWcm, Trange, aa, ab, ac, k2, q, m, f, k1, kr, RSR, BGTR))
+    x = x + 1
+
+#print(year1_list)
+#Storing the result of first year('year1_list') into the totalArray
+totalList[0] = (year1_list)
+
+
+#Running all the years by passing the output array of the previous year as a parameter
+for i in range(2, T+t_int, t_int):
+    PlatDepth(totalList[i-2], ySLR[i], i, fE, MinE, AmpM, Amp, MHWcm, Trange, aa, ab, ac, k2, q, m, f, k1, kr, RSR, BGTR)
+
+#Writing the files from total array
+for i in range(1, T+t_int, t_int):
     name_i = str(i)
-    dem_input = namel[xx]
     outputFileName = outputDirectory + '//' + 'year_' + name_i + '.tif'
-    #outputFileName2 = outputDirectory + '\\' + 'year_' + 'D' + '.tif'
-    PlatDepth(dem_input, ySLR[i], outputFileName)
-    namel.append(outputFileName)
-    xx=xx+1
+    array_to_raster(totalList[i-1], outputFileName, x_pixels, y_pixels, PIXEL_SIZE, x_min, y_max)
+
+
+
 
 end = time.time()
-
+print ("Time Elapsed (milli sec):")
+print ((end-start)*1000)
 print ("Time Elapsed (min):")
 print ((end - start)/60)
 print ("Time Elapsed (hour):")
